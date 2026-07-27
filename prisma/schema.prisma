@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+  STUDENT
+}
+
+enum OrderStatus {
+  PENDENTE
+  PAGO
+  EM_ENTREGA
+  ENTREGUE
+  CANCELADO
+  FALHA
+}
+
+enum PaymentSource {
+  SALDO
+  BALCAO
+}
+
+enum BalanceTxType {
+  RECARGA
+  DEBITO
+  ESTORNO
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         UserRole @default(STUDENT)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  student              Student?
+  rechargesPerformed   BalanceTransaction[] @relation("RechargeOperator")
+  ordersConfirmed      Order[]              @relation("OrderConfirmer")
+
+  @@index([email])
+  @@index([role])
+}
+
+model Student {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  matricula String   @unique
+  saldo     Float    @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions BalanceTransaction[]
+  orders       Order[]
+
+  @@index([matricula])
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  stock       Int      @default(0)
+  slot        Int      @unique
+  active      Boolean  @default(true)
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orderItems OrderItem[]
+
+  @@index([active])
+  @@index([slot])
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  studentId       String
+  status          OrderStatus   @default(PENDENTE)
+  paymentSource   PaymentSource?
+  total           Float
+  robotCommandSent Boolean      @default(false)
+  robotMessage    String?
+  confirmedById   String?
+  paidAt          DateTime?
+  deliveredAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  student     Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  confirmedBy User?       @relation("OrderConfirmer", fields: [confirmedById], references: [id])
+  items       OrderItem[]
+
+  @@index([status])
+  @@index([studentId])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  productId String
+  quantity  Int    @default(1)
+  unitPrice Float
+  slot      Int
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model BalanceTransaction {
+  id          String        @id @default(cuid())
+  studentId   String
+  type        BalanceTxType
+  amount      Float
+  balanceAfter Float
+  note        String?
+  operatorId  String?
+  orderId     String?
+  createdAt   DateTime      @default(now())
+
+  student  Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  operator User?   @relation("RechargeOperator", fields: [operatorId], references: [id])
+
+  @@index([studentId])
+  @@index([createdAt])
+}
